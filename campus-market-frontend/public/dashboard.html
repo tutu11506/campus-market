@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>校园二手交易平台 · 实时热销/滞销看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --card:rgba(22,30,58,.72); --card-border:rgba(120,160,255,.18);
+    --txt:#e8eeff; --sub:#9aa7c7; --accent:#5eead4; --hot:#ff5d73; --cold:#4d9dff; --warn:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 15% -10%,#1a2456 0%,transparent 60%),radial-gradient(900px 500px at 100% 0%,#0f3a3a 0%,transparent 55%),var(--bg);color:var(--txt);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;min-height:100vh}
+  header{padding:18px 26px 10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  h1{font-size:20px;margin:0;letter-spacing:1px}
+  h1 b{color:var(--accent)}
+  .sub{font-size:12px;color:var(--sub);margin-top:4px}
+  .banner{margin:0 26px 14px;padding:10px 14px;border-radius:10px;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.35);font-size:12.5px;color:#ffe7a8;line-height:1.6}
+  .banner b{color:var(--warn)}
+  .legend-inline{display:inline-flex;gap:14px;align-items:center;margin-left:14px;font-size:11.5px;color:var(--sub);vertical-align:middle}
+  .legend-inline i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .err{margin:0 26px 14px;padding:10px 14px;border-radius:10px;background:rgba(255,93,115,.1);border:1px solid rgba(255,93,115,.45);font-size:13px;color:#ffb3be;display:none}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--sub)}
+  .toolbar button{background:rgba(94,234,212,.12);color:var(--accent);border:1px solid rgba(94,234,212,.4);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;transition:.2s}
+  .toolbar button:hover{background:rgba(94,234,212,.25)}
+  .toolbar button.active{background:var(--accent);color:#06231f;font-weight:600}
+  .dot{width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block;margin-right:6px;animation:pulse 1.6s infinite}
+  .dot.pause{background:#888;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .grid{padding:0 26px 30px;display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;backdrop-filter:blur(6px);padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+  .card h3{margin:0 0 6px;font-size:13px;color:var(--sub);font-weight:600;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .card h3 .tag{font-size:11px;color:var(--accent);font-weight:400}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chips button{background:rgba(255,255,255,.06);color:var(--sub);border:1px solid var(--card-border);border-radius:20px;padding:4px 12px;cursor:pointer;font-size:11.5px;transition:.2s}
+  .chips button:hover{color:#fff;border-color:rgba(94,234,212,.5)}
+  .chips button.active{background:var(--accent);color:#06231f;border-color:var(--accent);font-weight:600}
+  .kpis{grid-column:span 12;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .kpi{background:linear-gradient(135deg,rgba(94,234,212,.10),rgba(94,234,212,.02));border:1px solid var(--card-border);border-radius:12px;padding:12px 14px}
+  .kpi .v{font-size:24px;font-weight:700;color:#fff}
+  .kpi .l{font-size:11.5px;color:var(--sub);margin-top:3px}
+  .kpi.hot .v{color:var(--hot)} .kpi.cold .v{color:var(--cold)}
+  .main{grid-column:span 8;min-height:500px}
+  .side{grid-column:span 4;display:flex;flex-direction:column;gap:14px}
+  .half{grid-column:span 6;min-height:320px}
+  .chart{width:100%}
+  footer{text-align:center;color:var(--sub);font-size:11.5px;padding:0 0 20px}
+  @media(max-width:1100px){.main,.side,.half{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>校园二手交易平台 · <b>实时热销 / 滞销看板</b></h1>
+    <div class="sub">数据源：后端 <code>http://localhost:8081/goods/list</code>（真实数据，自动刷新）</div>
+  </div>
+  <div class="toolbar">
+    <span id="live"><span class="dot"></span>实时刷新中</span>
+    <span>间隔</span>
+    <button data-sec="5">5s</button>
+    <button data-sec="10" class="active">10s</button>
+    <button data-sec="30">30s</button>
+    <button id="pauseBtn">暂停</button>
+    <button id="refreshBtn">立即刷新</button>
+    <span id="lastUpdate" style="color:var(--sub)">—</span>
+  </div>
+</header>
+
+<div class="banner">
+  <b>读图说明：</b>当前数据库 <code>order</code> 表暂无成交记录，因此「卖得好不好」以<b>真实浏览量 view_count</b> 作为热度代理指标。
+  主图「商品热度排行」按浏览量<b>从高到低</b>排列：条越长越受关注，<b style="color:#ff5d73">红色=热门/好卖</b>、<b style="color:#94a3b8">灰色=一般</b>、<b style="color:#4d9dff">蓝色=冷门/滞销</b>；可拖动右侧滑块浏览全部商品，或用上方分类按钮筛选。
+  <span class="legend-inline">
+    <span><i style="background:#ef4444"></i>爆款 ≥均值1.5倍</span>
+    <span><i style="background:#ff7a59"></i>热门 ≥均值</span>
+    <span><i style="background:#94a3b8"></i>一般</span>
+    <span><i style="background:#3b82f6"></i>冷门 &lt;P25</span>
+  </span>
+</div>
+<div class="err" id="errBox"></div>
+
+<div class="grid">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card main">
+    <h3>📊 商品热度排行（全量）
+      <span class="chips" id="mainFilter"></span>
+    </h3>
+    <div id="mainRank" class="chart" style="height:460px"></div>
+  </div>
+
+  <div class="side">
+    <div class="card" style="flex:1">
+      <h3>各分类平均热度 <span class="tag">浏览量均值</span></h3>
+      <div id="catBar" class="chart" style="height:200px"></div>
+    </div>
+    <div class="card" style="flex:1">
+      <h3>价格带 × 平均热度 <span class="tag">哪个价位更好卖</span></h3>
+      <div id="priceBar" class="chart" style="height:200px"></div>
+    </div>
+  </div>
+
+  <div class="card half">
+    <h3>🔥 热门榜 TOP10 <span class="tag">按浏览量降序</span></h3>
+    <div id="topBar" class="chart" style="height:320px"></div>
+  </div>
+  <div class="card half">
+    <h3>❄️ 冷门榜 BOTTOM10 <span class="tag">按浏览量升序 · 滞销预警</span></h3>
+    <div id="bottomBar" class="chart" style="height:320px"></div>
+  </div>
+</div>
+
+<footer>校园二手交易平台数据看板 · 所有指标均来自 MySQL <code>campus_market</code> 真实数据 · 无模拟数据</footer>
+
+<script>
+const API = 'http://localhost:8081';
+const PALETTE = {1:'#5eead4',2:'#f59e0b',3:'#a78bfa',4:'#f472b6',5:'#34d399',6:'#60a5fa'};
+const CAT_NAME = {1:'教材书籍',2:'数码产品',3:'生活用品',4:'服饰鞋包',5:'运动户外',6:'其他'};
+
+let goods = [];
+let timer = null, intervalSec = 10, paused = false;
+let cMain, cCat, cPrice, cTop, cBottom;
+let currentCat = 'all';   // 'all' 或分类 id
+let latest = null;         // 最近一次 compute 结果
+
+function $(id){return document.getElementById(id)}
+function fmt(n){return (n==null||isNaN(n))?0:Number(n).toLocaleString('zh-CN')}
+function daysSince(iso){try{return Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/86400000))}catch(e){return 0}}
+
+// ---------- 拉取全量（后端 pageSize 上限 50，分页拉取） ----------
+async function fetchAllGoods(){
+  const pageSize = 50; let all=[], page=1, total=null;
+  while(true){
+    const res = await fetch(`${API}/goods/list?pageNum=${page}&pageSize=${pageSize}`);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const json = await res.json();
+    if(json.code !== 200) throw new Error(json.msg || '接口返回异常 code='+json.code);
+    const list = (json.data && json.data.list) || [];
+    total = json.data && json.data.total;
+    all = all.concat(list);
+    if(list.length < pageSize) break;
+    if(total != null && all.length >= total) break;
+    if(page > 100) break;
+    page++;
+  }
+  return all;
+}
+
+// ---------- 聚合计算 ----------
+function compute(g){
+  const items = g.filter(x => x && !x.isDeleted);
+  const views = items.map(x=>+x.viewCount||0);
+  const sum = views.reduce((a,b)=>a+b,0);
+  const mean = items.length? sum/items.length : 0;
+  const sorted = [...views].sort((a,b)=>a-b);
+  const p25 = sorted.length? sorted[Math.floor(sorted.length*0.25)] : 0;
+  const hotCount = items.filter(x=>(+x.viewCount||0) > mean).length;
+  const coldCount = items.filter(x=>(+x.viewCount||0) < p25).length;
+
+  const catMap = {};
+  items.forEach(x=>{ const c=x.categoryId; if(!catMap[c]) catMap[c]={name:x.categoryName||CAT_NAME[c]||('分类'+c),sum:0,n:0}; catMap[c].sum+=(+x.viewCount||0); catMap[c].n++; });
+  const cats = Object.keys(catMap).map(k=>({id:+k,name:catMap[k].name,avg:catMap[k].sum/catMap[k].n,n:catMap[k].n,sum:catMap[k].sum})).sort((a,b)=>b.avg-a.avg);
+
+  const bands = [
+    {name:'0-50',lo:0,hi:50},{name:'50-100',lo:50,hi:100},{name:'100-300',lo:100,hi:300},
+    {name:'300-1k',lo:300,hi:1000},{name:'1k-5k',lo:1000,hi:5000},{name:'5k+',lo:5000,hi:Infinity}
+  ];
+  bands.forEach(b=>{b.sum=0;b.n=0});
+  items.forEach(x=>{ const p=+x.price||0; for(const b of bands){ if(p>=b.lo && p<b.hi){b.sum+=(+x.viewCount||0);b.n++;break} } });
+  const bandData = bands.map(b=>({name:b.name, avg:b.n?b.sum/b.n:0, n:b.n}));
+
+  const top = [...items].sort((a,b)=>(+b.viewCount||0)-(+a.viewCount||0)).slice(0,10);
+  const bottom = [...items].sort((a,b)=>(+a.viewCount||0)-(+b.viewCount||0)).slice(0,10);
+
+  return {items, mean, p25, sum, hotCount, coldCount, cats, bandData, top, bottom};
+}
+
+// ---------- 热度分档颜色 ----------
+function heatColor(v, mean, p25){
+  if(v >= mean*1.5) return '#ef4444'; // 爆款
+  if(v >= mean)     return '#ff7a59'; // 热门
+  if(v >= p25)      return '#94a3b8'; // 一般
+  return '#3b82f6';                    // 冷门
+}
+
+// ---------- 渲染 KPI ----------
+function renderKPI(d){
+  const cards = [
+    {l:'在售商品数', v:fmt(d.items.length)},
+    {l:'总浏览量', v:fmt(d.sum)},
+    {l:'平均热度(浏览量)', v:fmt(Math.round(d.mean))},
+    {l:'热门商品 (>均值)', v:fmt(d.hotCount), cls:'hot'},
+    {l:'冷门商品 (<P25)', v:fmt(d.coldCount), cls:'cold'}
+  ];
+  $('kpis').innerHTML = cards.map(c=>`<div class="kpi ${c.cls||''}"><div class="v">${c.v}</div><div class="l">${c.l}</div></div>`).join('');
+}
+
+// ---------- 主图：全量热度排行条形图 ----------
+function renderMainRank(d){
+  // 分类筛选
+  const list = (currentCat==='all') ? d.items : d.items.filter(x=>String(x.categoryId)===String(currentCat));
+  // 按浏览量降序
+  const sorted = [...list].sort((a,b)=>(+b.viewCount||0)-(+a.viewCount||0));
+  const names = sorted.map(g=>(g.title||'').length>24 ? (g.title||'').slice(0,24)+'…' : (g.title||''));
+  const values = sorted.map(g=>+g.viewCount||0);
+  const maxV = values.length ? Math.max(...values) : 1;
+
+  const data = sorted.map((g,i)=>({
+    value: +g.viewCount||0,
+    itemStyle:{ color: heatColor(+g.viewCount||0, d.mean, d.p25), borderRadius:[0,4,4,0] },
+    goods: g
+  }));
+
+  // dataZoom 默认显示前 30 条；不足则全显
+  const showN = Math.min(30, sorted.length);
+  const endPct = sorted.length ? (showN/sorted.length)*100 : 100;
+
+  const opt = {
+    backgroundColor:'transparent',
+    tooltip:{
+      trigger:'axis', axisPointer:{type:'shadow'},
+      backgroundColor:'rgba(10,16,36,.94)', borderColor:'rgba(120,160,255,.3)', textStyle:{color:'#e8eeff',fontSize:12},
+      formatter: function(params){
+        const p = params[0]; const g = p.data.goods; if(!g) return '';
+        const ratio = (+g.originalPrice||0)>0 ? ((+g.originalPrice)/(+g.price||1)).toFixed(2) : '—';
+        const v = +g.viewCount||0;
+        const tag = v>=d.mean*1.5?'<span style="color:#ff8a9a">★ 爆款</span>':v>=d.mean?'<span style="color:#ffb088">▲ 热门</span>':v<d.p25?'<span style="color:#7fb2ff">▼ 冷门</span>':'○ 一般';
+        return `<b>${g.title||''}</b><br/>分类：${g.categoryName||CAT_NAME[g.categoryId]||''}<br/>售价：¥${g.price}　原价：¥${g.originalPrice||'—'}　折扣：${ratio}x<br/>浏览量：<b>${g.viewCount}</b>　上架：${daysSince(g.createTime)}天<br/>${tag}`;
+      }
+    },
+    grid:{ left:190, right:90, top:10, bottom:30 },
+    xAxis:{ type:'value', name:'浏览量(热度)', nameTextStyle:{color:'#9aa7c7',fontSize:11}, axisLabel:{color:'#9aa7c7'}, splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}, axisLine:{lineStyle:{color:'rgba(255,255,255,.2)'}} },
+    yAxis:{
+      type:'category', inverse:true, data:names,
+      axisLabel:{color:'#c9d4f5',fontSize:11, width:180, overflow:'truncate'},
+      axisLine:{show:false}, axisTick:{show:false}
+    },
+    dataZoom:[
+      { type:'slider', yAxisIndex:0, right:10, width:14, height:'88%', start:0, end:endPct,
+        textStyle:{color:'#9aa7c7',fontSize:10}, borderColor:'rgba(255,255,255,.15)',
+        fillerColor:'rgba(94,234,212,.15)', handleStyle:{color:'#5eead4'}, moveHandleStyle:{color:'#5eead4'} },
+      { type:'inside', yAxisIndex:0, start:0, end:endPct }
+    ],
+    series:[{
+      type:'bar', data, barMaxWidth:16,
+      label:{ show:true, position:'right', color:'#c9d4f5', fontSize:11, formatter:p=>p.value },
+      markLine:{
+        silent:true, symbol:'none',
+        lineStyle:{color:'#ffd166', type:'dashed', width:1.5},
+        label:{color:'#ffd166', fontSize:10, formatter:'热度均值 '+Math.round(d.mean)},
+        data:[{xAxis: Math.round(d.mean)}]
+      }
+    }]
+  };
+  if(!cMain) cMain = echarts.init($('mainRank'));
+  cMain.setOption(opt, true);
+}
+
+// ---------- 分类筛选 chips ----------
+function renderFilter(d){
+  const box = $('mainFilter');
+  const chips = [{id:'all',name:'全部'}, ...d.cats.map(c=>({id:c.id,name:c.name}))];
+  box.innerHTML = chips.map(c=>`<button data-cat="${c.id}" class="${currentCat===String(c.id)?'active':''}">${c.name}</button>`).join('');
+  box.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentCat = b.dataset.cat; renderFilter(d); renderMainRank(d); });
+  });
+}
+
+// ---------- 分类柱图 ----------
+function renderCat(d){
+  const opt = {
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'}, backgroundColor:'rgba(10,16,36,.94)', textStyle:{color:'#e8eeff'}, formatter: p=>`${p[0].name}<br/>平均浏览量：${fmt(Math.round(p[0].value))}<br/>商品数：${p[0].data.n}`},
+    grid:{left:50,right:14,top:14,bottom:30},
+    xAxis:{type:'category', data:d.cats.map(c=>c.name), axisLabel:{color:'#9aa7c7',fontSize:10,interval:0,rotate:20}, axisLine:{lineStyle:{color:'rgba(255,255,255,.2)'}}},
+    yAxis:{type:'value', axisLabel:{color:'#9aa7c7'}, splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}},
+    series:[{type:'bar', data:d.cats.map(c=>({value:Math.round(c.avg), n:c.n, itemStyle:{color:PALETTE[c.id]||'#5eead4', borderRadius:[4,4,0,0]}})), barMaxWidth:30, label:{show:true,position:'top',color:'#9aa7c7',fontSize:10,formatter:p=>p.value}}]
+  };
+  if(!cCat) cCat = echarts.init($('catBar'));
+  cCat.setOption(opt,true);
+}
+
+// ---------- 价格带柱图 ----------
+function renderPrice(d){
+  const opt = {
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'}, backgroundColor:'rgba(10,16,36,.94)', textStyle:{color:'#e8eeff'}, formatter: p=>`价格带：${p[0].name}<br/>平均浏览量：${fmt(Math.round(p[0].value))}<br/>商品数：${p[0].data.n}`},
+    grid:{left:50,right:14,top:14,bottom:30},
+    xAxis:{type:'category', data:d.bandData.map(b=>b.name), axisLabel:{color:'#9aa7c7',fontSize:10}, axisLine:{lineStyle:{color:'rgba(255,255,255,.2)'}}},
+    yAxis:{type:'value', axisLabel:{color:'#9aa7c7'}, splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}},
+    series:[{type:'bar', data:d.bandData.map(b=>({value:Math.round(b.avg), n:b.n, itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#5eead4'},{offset:1,color:'#2563eb'}]), borderRadius:[4,4,0,0]}})), barMaxWidth:34, label:{show:true,position:'top',color:'#9aa7c7',fontSize:10}}]
+  };
+  if(!cPrice) cPrice = echarts.init($('priceBar'));
+  cPrice.setOption(opt,true);
+}
+
+// ---------- TOP/BOTTOM 横条 ----------
+function renderRank(el, arr, color, chart){
+  const names = arr.map(g=>(g.title||'').length>22?(g.title||'').slice(0,22)+'…':(g.title||''));
+  const vals = arr.map(g=>+g.viewCount||0);
+  const opt = {
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'}, backgroundColor:'rgba(10,16,36,.94)', textStyle:{color:'#e8eeff'},
+      formatter: p=>{ const g=arr[p[0].dataIndex]; return `<b>${g.title}</b><br/>分类：${g.categoryName||''}<br/>售价：¥${g.price}　浏览量：${g.viewCount}<br/>上架：${daysSince(g.createTime)}天`; }},
+    grid:{left:130,right:40,top:8,bottom:8},
+    xAxis:{type:'value', axisLabel:{color:'#9aa7c7'}, splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}},
+    yAxis:{type:'category', inverse:true, data:names, axisLabel:{color:'#c9d4f5',fontSize:11}, axisLine:{show:false}, axisTick:{show:false}},
+    series:[{type:'bar', data:vals, barMaxWidth:16, itemStyle:{color, borderRadius:[0,4,4,0]}, label:{show:true,position:'right',color:'#c9d4f5',fontSize:11}}]
+  };
+  chart.setOption(opt,true);
+}
+
+// ---------- 主刷新流程 ----------
+async function refresh(){
+  const errBox = $('errBox');
+  try{
+    const raw = await fetchAllGoods();
+    goods = raw;
+    errBox.style.display='none';
+    const d = compute(raw);
+    latest = d;
+    renderKPI(d);
+    renderFilter(d);
+    renderMainRank(d);
+    renderCat(d); renderPrice(d);
+    if(!cTop) cTop = echarts.init($('topBar'));
+    if(!cBottom) cBottom = echarts.init($('bottomBar'));
+    renderRank($('topBar'), d.top, '#ff5d73', cTop);
+    renderRank($('bottomBar'), d.bottom, '#4d9dff', cBottom);
+    $('lastUpdate').textContent = '最后更新 ' + new Date().toLocaleTimeString('zh-CN') + '（共'+d.items.length+'件）';
+  }catch(e){
+    errBox.style.display='block';
+    errBox.textContent = '⚠ 数据拉取失败：' + e.message + '。已保留上次数据，未使用模拟数据。请确认后端 8081 运行中且 /goods/list 可访问。';
+  }
+}
+
+// ---------- 控制 ----------
+function setIntervalSec(s){
+  intervalSec = s;
+  document.querySelectorAll('.toolbar button[data-sec]').forEach(b=>b.classList.toggle('active', +b.dataset.sec===s));
+  restartTimer();
+}
+function restartTimer(){
+  if(timer) clearInterval(timer);
+  if(!paused) timer = setInterval(refresh, intervalSec*1000);
+}
+function togglePause(){
+  paused = !paused;
+  $('pauseBtn').textContent = paused?'继续':'暂停';
+  $('pauseBtn').classList.toggle('active', paused);
+  $('live').innerHTML = paused ? '<span class="dot pause"></span>已暂停' : '<span class="dot"></span>实时刷新中';
+  restartTimer();
+}
+
+document.querySelectorAll('.toolbar button[data-sec]').forEach(b=>b.addEventListener('click',()=>setIntervalSec(+b.dataset.sec)));
+$('pauseBtn').addEventListener('click', togglePause);
+$('refreshBtn').addEventListener('click', refresh);
+window.addEventListener('resize', ()=>{ [cMain,cCat,cPrice,cTop,cBottom].forEach(c=>c&&c.resize()); });
+
+// 启动
+refresh();
+restartTimer();
+</script>
+</body>
+</html>

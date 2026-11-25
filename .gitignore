@@ -1,0 +1,29 @@
+# ===== 后端构建产物 =====
+campus-market/target/
+campus-market/BOOT-INF/
+campus-market/logs/
+campus-market/upload/
+*.class
+
+# ===== 前端依赖与构建产物 =====
+campus-market-frontend/node_modules/
+campus-market-frontend/dist/
+campus-market-frontend/.vite/
+
+# ===== 环境变量与密钥（.env.example 需要保留） =====
+.env
+.env.local
+*.pem
+
+# ===== 日志与临时文件 =====
+logs/
+*.log
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db

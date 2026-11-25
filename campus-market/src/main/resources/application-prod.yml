@@ -1,0 +1,12 @@
+# 生产环境覆盖配置：由 SPRING_PROFILES_ACTIVE=prod 启用
+# 安全红线由 ProductionSecurityCheck 在启动时校验，不满足直接启动失败
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    com.example.campusmarket: INFO

@@ -1,0 +1,80 @@
+name: CI
+
+# 每次 push 与 PR 都跑：后端单测 + 前端构建。
+# 目标：测试失败阻断合并，构建产物可下载（Actions 页面 Artifacts）。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端 · mvn test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: campus-market
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      # 单测全部用 Mock 隔离 Mapper，不依赖 MySQL 实例，因此无需 service 容器
+      - name: 执行单元测试
+        run: mvn -B -ntp test
+
+      - name: 打包（跳过测试，测试已在上一阶段执行）
+        run: mvn -B -ntp -DskipTests package
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-reports
+          path: campus-market/target/surefire-reports/
+          retention-days: 7
+
+      - name: 上传后端构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: campus-market/target/*.jar
+          retention-days: 7
+
+  frontend:
+    name: 前端 · npm run build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: campus-market-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: campus-market-frontend/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 生产构建
+        run: npm run build
+
+      - name: 上传前端构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: campus-market-frontend/dist/
+          retention-days: 7
