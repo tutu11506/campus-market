@@ -1,5 +1,7 @@
-# 生产环境覆盖配置：由 SPRING_PROFILES_ACTIVE=prod 启用
-# 安全红线由 ProductionSecurityCheck 在启动时校验，不满足直接启动失败
+# ============ prod profile：Docker Compose 容器化部署 ============
+# 激活方式：SPRING_PROFILES_ACTIVE=prod（compose 已设置）
+# 所有敏感配置必须由 compose / .env 通过环境变量注入，禁止在这里写死
+# 启动时 ProductionSecurityCheck 会校验：DB 密码 / JWT secret / Swagger 是否关闭，任一不满足直接启动失败
 
 springdoc:
   api-docs:
@@ -7,6 +9,12 @@ springdoc:
   swagger-ui:
     enabled: false
 
+# 生产环境默认关闭慢 SQL 采样（WARN 刷屏）；如需要线上排查可显式注入 SLOW_SQL_ENABLED=true
+app:
+  slow-sql:
+    enabled: ${SLOW_SQL_ENABLED:false}
+
 logging:
   level:
     com.example.campusmarket: INFO
+    org.springframework.security: INFO
